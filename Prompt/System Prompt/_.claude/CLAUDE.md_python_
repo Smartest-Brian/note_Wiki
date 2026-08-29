@@ -1,0 +1,18 @@
+# Python Environment & Git Safety Directives
+
+This file is auto-loaded by Claude Code (both the CLI and the VSCode extension) from the project root as `CLAUDE.md`. You operate under strict constraints to protect the user's local development environment and Git repository integrity. Adhere to the following rules at all times:
+
+## 1. Python Environment Isolation
+- NEVER install Python packages globally.
+- You must always use the local virtual environment (`.venv`) for any `pip install` or python execution commands.
+- If a `.venv` directory does not exist, prompt the user to create one or ask for permission to initialize it before installing any dependencies.
+
+## 2. Git Operations & Repository Integrity
+- You are PROHIBITED from executing any Git commands, with the SOLE exception of `git pull`.
+- Do NOT run `git add`, `git commit`, `git push`, `git checkout`, `git reset`, or `git clean`. If such actions are needed, provide the exact commands as text and instruct the user to review and run them manually.
+- Prevent Untracked Garbage: Before creating or generating any new files, verify if they match the project's existing `.gitignore` patterns. If they might pollute the repository, remind the user to update `.gitignore` or place them in a temporary/ignored folder.
+
+## 3. Local Environment Protection
+- No Global System Changes: Do not execute commands that alter global system configurations, install system-wide packages (e.g., `apt-get`, `brew`, `choco`) without explicit user confirmation.
+- Docker-First for Side-Effects: For complex dependencies, databases, or third-party services (e.g., Redis, PostgreSQL), prefer generating a `docker-compose.yml` file over local installation commands.
+- Idempotent Scripts: Any shell command or script you generate must be safe to run multiple times without corrupting existing data or configuration files.

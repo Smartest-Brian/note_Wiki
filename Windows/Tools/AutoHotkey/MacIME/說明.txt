@@ -1,0 +1,54 @@
+Windows 系統「微軟注音」模擬 macOS Caps Lock 中英切換設定說明
+
+本說明文件提供兩種方法，讓 Windows 的微軟注音輸入法可以像 macOS 一樣，使用 Caps Lock 鍵進行中英文切換。
+
+======================================================================
+方法一：使用 AutoHotkey 腳本（最推薦，完美還原 macOS 體驗）
+======================================================================
+此方法透過 AutoHotkey 攔截按鍵，實現「短按 Caps Lock 切換中英」、「按下 Shift + Caps Lock 切換大小寫鎖定」的功能，且不影響其他組合鍵。
+
+【步驟說明】
+1. 下載並安裝 AutoHotkey v2.0 版本（官方網站：https://www.autohotkey.com/）。
+2. 在電腦任意位置點擊右鍵 ->「新增」->「AutoHotkey Script」，將檔案命名為「MacIME.ahk」。
+3. 右鍵點擊該檔案選擇編輯，將內文全部清空，並貼上以下程式碼：
+
+#Requires AutoHotkey v2.0
+
+; Map CapsLock to Shift for toggling Chinese/English in Microsoft Bopomofo
+$CapsLock::
+{
+    Send("{Shift}")
+}
+
+; Use Shift + CapsLock to toggle the actual CapsLock state (uppercase/lowercase)
+$+CapsLock::
+{
+    SetCapsLockState(!GetKeyState("CapsLock", "T"))
+}
+
+4. 儲存檔案並關閉。雙擊執行「MacIME.ahk」即可立刻啟用。
+5. （選用）若要開機自動啟動：按下 Win + R 鍵，輸入「shell:startup」並確定。將「MacIME.ahk」檔案建立捷徑，並把捷徑剪下貼上到該啟動資料夾中。
+
+
+======================================================================
+方法二：使用 Microsoft PowerToys（官方圖形化工具）
+======================================================================
+此方法適合不想執行自訂腳本的用戶，直接透過微軟官方工具的圖形介面進行鍵盤到底層的對應。
+
+【步驟說明】
+1. 開啟 Microsoft Store 搜尋並安裝「Microsoft PowerToys」。
+2. 開啟 PowerToys 視窗，點擊左側選單的「鍵盤管理器」(Keyboard Manager)。
+3. 確保鍵盤管理器為「開啟」狀態，接著點擊「重新對應按鍵」(Remap a key)。
+4. 點擊「新增按鍵重新對應」，進行以下設定：
+   - 【實體按鍵】：選擇或按下「Caps Lock」
+   - 【對應至】：選擇「Shift (Left)」
+   - 點擊右上角「確定」儲存。
+5. 若需要保留大寫鎖定功能，請回到鍵盤管理器主頁，點擊「重新對應捷徑」(Remap a shortcut)，並進行以下設定：
+   - 【實體捷徑】：選擇或按下「Shift (Left) + Caps Lock」
+   - 【對應至】：選擇「Caps Lock」
+   - 點擊右上角「確定」儲存。
+
+======================================================================
+【注意事項與差異比較】
+- 使用 AutoHotkey（方法一）：手感最接近 Mac，因為它是透過送出單次 Shift 訊號來切換，不會影響到你長按 Caps Lock 時的其他系統判定。
+- 使用 PowerToys（方法二）：設定簡單，但因為是底層鍵盤映射，當你按住 Caps Lock 時，Windows 會完全將其視為按住 Shift 鍵，可能會影響部分遊戲或組合鍵的操作。

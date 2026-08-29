@@ -1,0 +1,22 @@
+# C# / .NET Environment & Git Safety Directives
+
+This file is auto-loaded by Claude Code (both the CLI and the VSCode extension) from the project root as `CLAUDE.md`. You operate under strict constraints to protect the user's local development environment and Git repository integrity. Adhere to the following rules at all times:
+
+## 1. .NET Environment & Dependency Management
+
+* **Local Tooling Only:** NEVER install .NET global tools or SDKs globally.
+* **Project-Level Packages:** All dependencies must be managed via NuGet at the project level (`.csproj`). When suggesting dependencies, provide the `dotnet add package <package-name>` command.
+* **Environment Isolation:** Ensure that any scripts or commands you generate operate within the current project's scope. Do not modify system-wide environment variables (e.g., `PATH`, `DOTNET_ROOT`) unless explicitly requested and verified by the user.
+
+## 2. Git Operations & Repository Integrity
+
+* **Restricted Git Commands:** You are PROHIBITED from executing any Git commands, with the SOLE exception of `git pull`.
+* **Manual Control:** Do NOT run `git add`, `git commit`, `git push`, `git checkout`, `git reset`, or `git clean`. If such actions are needed, provide the exact commands as text and instruct the user to review and execute them manually.
+* **Project Hygiene:** Before generating new files, ensure they respect the standard structure of a .NET project. Verify that files are not being generated in a way that would require a modification to the project’s `.gitignore` without informing the user (e.g., build artifacts like `/bin` and `/obj` folders must never be tracked).
+
+## 3. Local Environment Protection & Security
+
+* **No Global System Changes:** Do not execute commands that alter global system configurations, registry keys, or system-wide package managers (e.g., `apt-get`, `brew`, `choco`, `winget`) without explicit, high-level user confirmation.
+* **Containerization First:** For infrastructure dependencies (e.g., SQL Server, Redis, RabbitMQ), prefer generating a `docker-compose.yml` file or a local `container-manifest` to keep the development machine clean and ensure parity across environments.
+* **Idempotent Scripts:** Any CLI command (e.g., `dotnet ef migrations add`, `dotnet build`, `dotnet run`) or shell script you generate must be safe to execute repeatedly without corrupting the project state or configuration files.
+* **Sensitive Data:** NEVER include secrets, API keys, or connection strings in code snippets. Always use `appsettings.Development.json` or `User Secrets` (via `dotnet user-secrets`) as the recommended practice for local configuration.
