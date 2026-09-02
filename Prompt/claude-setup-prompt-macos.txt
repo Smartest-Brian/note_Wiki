@@ -1,11 +1,11 @@
-【給 Claude 的初始設定 prompt】
-請依照以下規格，在這台 Windows 電腦上建立完整的工作目錄與規則檔案。
-帳號路徑請一律使用 C:\Users\{account}\，{account} 請替換為當前 Windows 使用者帳號名稱。
+【給 Claude 的初始設定 prompt】(macOS 版)
+請依照以下規格，在這台 macOS 電腦上建立完整的工作目錄與規則檔案。
+帳號路徑請一律使用 /Users/{account}/（或 ~/），{account} 請替換為當前 macOS 使用者帳號名稱。
 
 ================================================================
 一、基本原則
 ================================================================
-1. 工作目錄位置：C:\Users\{account}\claude-workspace\
+1. 工作目錄位置：~/claude-workspace/
 2. 不導入 Git 版本控制。
 3. 操作日誌格式採用 JSONL（activity_log.jsonl）。
    理由：append 不會破壞格式、可用 jq 或程式查詢統計；
@@ -16,51 +16,53 @@
    - activity_log 放進 logs/，支援每月封存至 logs/archive/。
    - 不設 data/dev/，開發資料放各專案自身路徑，由 memory/dev.md 索引。
    - 另建立 data/general/ 與 README.md。
+   - 另建立 .claude/wrappers/，專門存放「密鑰存取用的 wrapper script」，
+     此資料夾內只放腳本本身，不放任何明文密鑰。
 
 ================================================================
 二、請建立以下檔案／資料夾架構
 ================================================================
-C:\Users\{account}\
-├── .claude\
+~/
+├── .claude/
 │   └── CLAUDE.md                  # 使用者層級：一行 @import 掛載主規則檔
 │                                  #（不論工作目錄在哪都會被讀取）
 │
-└── claude-workspace\
+└── claude-workspace/
     ├── README.md                  # 給人看的導覽
-    ├── .claude\
+    ├── .claude/
     │   ├── CLAUDE.md              # 主規則檔（全域規則 + 分類索引 + 路徑索引）
-    │   └── memory\
+    │   ├── wrappers/               # 密鑰存取 wrapper script 存放處（無明文密鑰）
+    │   └── memory/
     │       ├── stocks.md          # 股票 / 市場資料分析
     │       ├── network.md         # 網路狀態偵測與診斷
     │       ├── dev.md             # 程式撰寫與除錯
     │       └── general.md         # 其他雜項
-    ├── data\
-    │   ├── stocks\                # 股票 CSV、分析輸出
-    │   ├── network\               # ping / tracert / 掃描 log
-    │   └── general\               # 其他產生的資料檔
-    └── logs\
+    ├── data/
+    │   ├── stocks/                # 股票 CSV、分析輸出
+    │   ├── network/               # ping / traceroute / 掃描 log
+    │   └── general/                # 其他產生的資料檔
+    └── logs/
         ├── activity_log.jsonl     # append-only 操作日誌（當月）
-        └── archive\
+        └── archive/
             └── YYYY-MM.jsonl      # 每月封存
 
 運作方式：
-C:\Users\{account}\.claude\CLAUDE.md 以 @import 指向
-C:\Users\{account}\claude-workspace\.claude\CLAUDE.md，
-因此 /remote-control 工作目錄固定在 system32 時，規則仍自動生效。
-※ 修改後需重開 Claude Code session（或 /memory 重載）才會載入。
+~/.claude/CLAUDE.md 以 @import 指向 ~/claude-workspace/.claude/CLAUDE.md，
+因此不論 Claude Code / Claude Desktop 的工作目錄在哪，規則仍自動生效。
+※ 修改後需重開 session（或 /memory 重載）才會載入。
 
 ================================================================
-三、C:\Users\{account}\.claude\CLAUDE.md 內容
+三、~/.claude/CLAUDE.md 內容
 ================================================================
 # 使用者層級規則
 
 實際規則內容集中在 workspace 主檔，透過下方 import 載入
-（不論工作目錄在哪，此檔都會被 Claude Code 讀取）：
+（不論工作目錄在哪，此檔都會被讀取）：
 
-@C:/Users/{account}/claude-workspace/.claude/CLAUDE.md
+@/Users/{account}/claude-workspace/.claude/CLAUDE.md
 
 ================================================================
-四、claude-workspace\.claude\CLAUDE.md 內容（主規則檔）
+四、claude-workspace/.claude/CLAUDE.md 內容（主規則檔）
 ================================================================
 # Workspace 主規則檔
 
@@ -85,6 +87,19 @@ C:\Users\{account}\claude-workspace\.claude\CLAUDE.md，
    「資料檔索引」註明完整路徑。
 
 activity log 只記「何時、哪個分類、做了什麼」，不寫分析細節。
+
+### 密鑰 / Token 存取
+任何操作需要用到密鑰、Token、API Key（例如呼叫外部 API、啟動 MCP server）時：
+1. 先檢查 `.claude/wrappers/` 底下是否存在對應的 wrapper script
+   （命名規則見「五、Token 安全儲存機制」）。
+2. 若存在：直接呼叫該 wrapper script 取得對應環境變數並使用，
+   **不得**自行嘗試用 `security` 指令讀取 Keychain 原始項目、
+   不得要求使用者貼上明文。
+3. 若不存在：停止操作並告知使用者「尚未設定此密鑰的 wrapper script」，
+   引導使用者依「五、Token 安全儲存機制」章節建立，
+   **不得**主動詢問使用者要不要直接把明文 token 貼在對話或檔案中。
+4. 任何情況下，取得的 token / 密鑰明文都不得寫入 activity_log.jsonl、
+   memory/*.md、data/ 底下任何檔案，或出現在回覆內容中。
 
 ### 安全
 - 不在任何檔案（含 log 與 memory）中寫入密碼、API key、憑證、個資。
@@ -115,11 +130,12 @@ activity log 只記「何時、哪個分類、做了什麼」，不寫分析細�
 
 | 項目 | 路徑 |
 |------|------|
-| 股票資料 | C:\Users\{account}\claude-workspace\data\stocks\ |
-| 網路 log | C:\Users\{account}\claude-workspace\data\network\ |
-| 其他資料 | C:\Users\{account}\claude-workspace\data\general\ |
-| 操作日誌（當月） | C:\Users\{account}\claude-workspace\logs\activity_log.jsonl |
-| 日誌封存 | C:\Users\{account}\claude-workspace\logs\archive\YYYY-MM.jsonl |
+| 股票資料 | ~/claude-workspace/data/stocks/ |
+| 網路 log | ~/claude-workspace/data/network/ |
+| 其他資料 | ~/claude-workspace/data/general/ |
+| 操作日誌（當月） | ~/claude-workspace/logs/activity_log.jsonl |
+| 日誌封存 | ~/claude-workspace/logs/archive/YYYY-MM.jsonl |
+| 密鑰 wrapper script | ~/claude-workspace/.claude/wrappers/ |
 
 ---
 
@@ -140,6 +156,79 @@ activity log 只記「何時、哪個分類、做了什麼」，不寫分析細�
 每月首次寫入前，若 activity_log.jsonl 內含上個月（或更早）的紀錄，
 先將既有內容整檔搬到 logs/archive/YYYY-MM.jsonl（依當前紀錄多數所屬月份命名），
 再清空 activity_log.jsonl 並寫入本月新紀錄。
+
+---
+
+## 五、Token 安全儲存機制（macOS：Keychain）
+
+macOS 上的密鑰不落地存放於任何檔案，而是存進系統的 **Keychain**，
+透過 `security` 指令存取。取用邏輯一律是「wrapper script 先查 Keychain
+再 export 環境變數」，不會有明文 token 常駐在磁碟上的設定檔裡。
+
+### 5.1 存入密鑰（使用者手動於 Terminal 執行，不由 Claude 自動執行）
+```bash
+security add-generic-password -a "$USER" -s "LINE_CHANNEL_ACCESS_TOKEN" -w "你的token"
+security add-generic-password -a "$USER" -s "LINE_USER_ID" -w "你的id"
+```
+- `-a`：帳號（account），通常放 `$USER` 即可。
+- `-s`：服務名稱（service），wrapper script 會用這個名稱去查找，等同於「這把密鑰的名字」。
+- `-w`：實際密碼／token 內容。
+
+### 5.2 wrapper script 命名與存放規則
+- 存放路徑固定為：`~/claude-workspace/.claude/wrappers/`
+- 命名規則：`start-{用途}.sh`，例如 `start-line-bot.sh`
+- 需要執行權限：`chmod +x ~/claude-workspace/.claude/wrappers/start-line-bot.sh`
+- wrapper script 只負責「從 Keychain 取值 → export 成環境變數 → 呼叫實際程式」，
+  本身不得包含任何明文密鑰。
+
+### 5.3 wrapper script 範例
+```bash
+#!/bin/bash
+# .claude/wrappers/start-line-bot.sh
+
+export LINE_CHANNEL_ACCESS_TOKEN=$(security find-generic-password -a "$USER" -s "LINE_CHANNEL_ACCESS_TOKEN" -w)
+export LINE_USER_ID=$(security find-generic-password -a "$USER" -s "LINE_USER_ID" -w)
+
+if [ -z "$LINE_CHANNEL_ACCESS_TOKEN" ] || [ -z "$LINE_USER_ID" ]; then
+  echo "錯誤：無法從 Keychain 讀取必要的環境變數" >&2
+  exit 1
+fi
+
+exec node /path/to/your/line-bot-mcp-server/index.js
+```
+
+第一次執行 `security find-generic-password` 時，macOS 會跳出系統彈窗
+詢問是否允許該程式存取 Keychain 中的這筆密碼，選「一律允許」即可，
+之後不會再重複詢問。
+
+### 5.4 若情境涉及 Claude Desktop 的 MCP 設定
+如果這台機器上是透過 **Claude Desktop** 串接 MCP server（而非本文件
+主體所描述的 Claude Code workspace），密鑰配置檔位置為：
+
+```
+~/Library/Application Support/Claude/claude_desktop_config.json
+```
+
+規則同樣是：**不要**在該 JSON 的 `"env"` 欄位直接寫明文 token，
+而是把 `"command"` 指向上述 wrapper script，讓 Claude Desktop 啟動
+MCP server 時透過 wrapper 動態注入環境變數。範例：
+
+```json
+{
+  "mcpServers": {
+    "line-bot": {
+      "command": "/Users/{account}/claude-workspace/.claude/wrappers/start-line-bot.sh"
+    }
+  }
+}
+```
+
+此章節屬於「知識參考」，Claude 不得自動修改 `claude_desktop_config.json`，
+如需變更須先向使用者確認。另外建議：
+```bash
+chmod 600 ~/Library/Application\ Support/Claude/claude_desktop_config.json
+```
+確保只有目前使用者帳號能讀取這個設定檔本身。
 
 ================================================================
 五、memory 子檔案骨架
@@ -176,7 +265,7 @@ activity log 只記「何時、哪個分類、做了什麼」，不寫分析細�
 # 網路狀態偵測與診斷
 
 ## 常用診斷指令
-（ping / tracert / nslookup / Test-NetConnection / 掃描工具 等，含慣用參數）
+（ping / traceroute / dig / nslookup / lsof / netstat 等，含慣用參數）
 
 ## 已知異常紀錄
 | 日期 | 症狀 | 判斷原因 | 處理方式 |
@@ -239,10 +328,11 @@ activity log 只記「何時、哪個分類、做了什麼」，不寫分析細�
 ================================================================
 # claude-workspace
 
-Claude Code（/remote-control）在這台 Windows VM 上的行為紀錄與分類機制。
+Claude（Claude Code / Claude Desktop）在這台 macOS 機器上的行為紀錄與分類機制。
 
 ## 導覽
-- `.claude/CLAUDE.md` — 主規則檔（全域規則、分類索引、路徑索引）
+- `.claude/CLAUDE.md` — 主規則檔（全域規則、分類索引、路徑索引、Token 存取機制）
+- `.claude/wrappers/` — 密鑰存取用 wrapper script（不含任何明文密鑰）
 - `.claude/memory/` — 各分類細節紀錄
   - `stocks.md` 股票 / 市場分析
   - `network.md` 網路偵測與診斷
@@ -253,8 +343,11 @@ Claude Code（/remote-control）在這台 Windows VM 上的行為紀錄與分類
 - `logs/archive/` — 每月封存的舊日誌
 
 ## 運作方式
-`C:\Users\{account}\.claude\CLAUDE.md` 內以 `@import` 指向本資料夾的
-`.claude/CLAUDE.md`，因此不論 Claude Code 的工作目錄在哪，規則都會生效。
+`~/.claude/CLAUDE.md` 內以 `@import` 指向本資料夾的 `.claude/CLAUDE.md`，
+因此不論工作目錄在哪，規則都會生效。
+
+密鑰一律不落地於本資料夾內任何檔案，只存於 macOS Keychain，
+由 `.claude/wrappers/` 內的腳本在執行當下動態取用。
 
 ================================================================
 七、資料檔命名規則
@@ -267,8 +360,11 @@ Claude Code（/remote-control）在這台 Windows VM 上的行為紀錄與分類
 ================================================================
 八、建置完成後請回報
 ================================================================
-1. 確認上述所有檔案與資料夾皆已建立完成。
+1. 確認上述所有檔案與資料夾（含 .claude/wrappers/）皆已建立完成。
 2. 於 activity_log.jsonl 寫入本次建置的第一筆紀錄。
 3. 於 general.md 寫入本次建置的雜項紀錄。
-4. 提醒使用者：需重新開啟 session（或執行 /memory 重載）主規則檔才會實際生效。
+4. 若 .claude/wrappers/ 目前是空的，明確提醒使用者：
+   尚未建立任何密鑰 wrapper script，之後若有 Token 需求，
+   請依主規則檔「五、Token 安全儲存機制」章節設定。
+5. 提醒使用者：需重新開啟 session（或執行 /memory 重載）主規則檔才會實際生效。
 ================================================================
