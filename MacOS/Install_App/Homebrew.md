@@ -106,7 +106,7 @@ $ brew install --cask font-jetbrains-mono
 # Logi Options+
 $ brew install --cask logi-options-plus
 
-# Google Chrome Remote Desktop（預設不安裝，需要遠端桌面功能時再手動執行）
+# Google Chrome Remote Desktop（預設不安裝，需要遠端桌面功能時再手動執行）(建議用網頁安裝)
 # $ brew install --cask chrome-remote-desktop-host
  
 ```
