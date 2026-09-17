@@ -1,6 +1,6 @@
-# macOS Keychain 密鑰管理教學
+# macOS Keychain 密鑰管理教學（Telegram 版）
 
-以 LINE Bot 的 `LINE_CHANNEL_ACCESS_TOKEN` 與 `LINE_USER_ID` 為例，說明如何用 macOS 內建的 Keychain 安全地儲存密鑰，並讓程式（例如 MCP server）在執行時動態取用，避免明文 token 長期躺在任何設定檔或程式碼裡。
+以 Telegram Bot 的 `telegram-bot-token` 與 `telegram-chat-id` 為例，說明如何用 macOS 內建的 Keychain 安全地儲存密鑰，並讓程式（例如 MCP server）在執行時動態取用，避免明文 token 長期躺在任何設定檔或程式碼裡。
 
 ---
 
@@ -21,8 +21,8 @@ Keychain 是 macOS 內建的加密憑證儲存系統，本身受你的登入密�
 ## 二、存入密鑰
 
 ```bash
-security add-generic-password -a "$USER" -s "LINE_CHANNEL_ACCESS_TOKEN" -w "你的token"
-security add-generic-password -a "$USER" -s "LINE_USER_ID" -w "你的id"
+security add-generic-password -a "$USER" -s "telegram-bot-token" -w "你的Bot Token"
+security add-generic-password -a "$USER" -s "telegram-chat-id" -w "你的Chat ID"
 ```
 
 執行後這兩筆資料就加密存在 Keychain 裡，**不會**出現在任何檔案、shell history 以外的地方（建議存完後清一下 shell history，見第七節）。
@@ -34,7 +34,7 @@ security add-generic-password -a "$USER" -s "LINE_USER_ID" -w "你的id"
 ## 三、驗證有沒有存成功
 
 ```bash
-security find-generic-password -a "$USER" -s "LINE_CHANNEL_ACCESS_TOKEN"
+security find-generic-password -a "$USER" -s "telegram-bot-token"
 ```
 
 這樣只會顯示這筆密鑰的「屬性資訊」（帳號、服務名稱、建立時間等），**不會**直接顯示密碼內容，這是正常的、也是安全設計的一部分。
@@ -46,7 +46,7 @@ security find-generic-password -a "$USER" -s "LINE_CHANNEL_ACCESS_TOKEN"
 只有加上 `-w` 才會印出密碼本身：
 
 ```bash
-security find-generic-password -a "$USER" -s "LINE_CHANNEL_ACCESS_TOKEN" -w
+security find-generic-password -a "$USER" -s "telegram-bot-token" -w
 ```
 
 **第一次**執行時，如果是別的程式（非 `security` 指令本身，例如某個 script）去呼叫底層 API 讀取，macOS 會跳出系統彈窗，詢問是否允許該程式存取。用 Terminal 直接下 `security` 指令通常不會跳窗，因為這是系統內建工具。
@@ -59,11 +59,11 @@ Keychain 不支援「覆蓋寫入」，要嘛用 `-U` 參數就地更新，要�
 
 ```bash
 # 方法一：就地更新（推薦）
-security add-generic-password -a "$USER" -s "LINE_CHANNEL_ACCESS_TOKEN" -w "新的token" -U
+security add-generic-password -a "$USER" -s "telegram-bot-token" -w "新的token" -U
 
 # 方法二：先刪除再新增
-security delete-generic-password -a "$USER" -s "LINE_CHANNEL_ACCESS_TOKEN"
-security add-generic-password -a "$USER" -s "LINE_CHANNEL_ACCESS_TOKEN" -w "新的token"
+security delete-generic-password -a "$USER" -s "telegram-bot-token"
+security add-generic-password -a "$USER" -s "telegram-bot-token" -w "新的token"
 ```
 
 ---
@@ -71,8 +71,8 @@ security add-generic-password -a "$USER" -s "LINE_CHANNEL_ACCESS_TOKEN" -w "新�
 ## 六、刪除密鑰
 
 ```bash
-security delete-generic-password -a "$USER" -s "LINE_CHANNEL_ACCESS_TOKEN"
-security delete-generic-password -a "$USER" -s "LINE_USER_ID"
+security delete-generic-password -a "$USER" -s "telegram-bot-token"
+security delete-generic-password -a "$USER" -s "telegram-chat-id"
 ```
 
 ---
@@ -104,32 +104,32 @@ setopt HIST_IGNORE_SPACE
 
 ## 八、寫 wrapper script 動態取用（實際串接的關鍵一步）
 
-單獨存進 Keychain 還不夠，你的程式（例如 LINE Bot MCP server）並不知道去哪裡拿。做法是寫一個 wrapper script，啟動時先去 Keychain 撈值、export 成環境變數，再啟動真正的程式。
+單獨存進 Keychain 還不夠，你的程式（例如 Telegram Bot MCP server）並不知道去哪裡拿。做法是寫一個 wrapper script，啟動時先去 Keychain 撈值、export 成環境變數，再啟動真正的程式。
 
 **建議存放路徑：**
 ```
-~/claude-workspace/.claude/wrappers/start-line-bot.sh
+~/claude-workspace/.claude/wrappers/run_telegram_mcp.sh
 ```
 
 **內容：**
 ```bash
 #!/bin/bash
-# start-line-bot.sh
+# run_telegram_mcp.sh
 
-export LINE_CHANNEL_ACCESS_TOKEN=$(security find-generic-password -a "$USER" -s "LINE_CHANNEL_ACCESS_TOKEN" -w)
-export LINE_USER_ID=$(security find-generic-password -a "$USER" -s "LINE_USER_ID" -w)
+export TELEGRAM_BOT_TOKEN=$(security find-generic-password -a "$USER" -s "telegram-bot-token" -w)
+export TELEGRAM_CHAT_ID=$(security find-generic-password -a "$USER" -s "telegram-chat-id" -w)
 
-if [ -z "$LINE_CHANNEL_ACCESS_TOKEN" ] || [ -z "$LINE_USER_ID" ]; then
+if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
   echo "錯誤：無法從 Keychain 讀取必要的環境變數" >&2
   exit 1
 fi
 
-exec node /path/to/your/line-bot-mcp-server/index.js
+exec python3 /path/to/your/telegram-notify/telegram_notify.py
 ```
 
 **給執行權限：**
 ```bash
-chmod +x ~/claude-workspace/.claude/wrappers/start-line-bot.sh
+chmod +x ~/claude-workspace/.claude/wrappers/run_telegram_mcp.sh
 ```
 
 之後不論是手動執行、排程執行，還是被 Claude Desktop 的 MCP 設定呼叫，都是呼叫這支 script，而不是直接把 token 寫死在任何地方。
@@ -147,12 +147,12 @@ chmod +x ~/claude-workspace/.claude/wrappers/start-line-bot.sh
 ```json
 {
   "mcpServers": {
-    "line-bot": {
-      "command": "node",
-      "args": ["/path/to/line-bot-mcp-server/index.js"],
+    "telegram-notify": {
+      "command": "python3",
+      "args": ["/path/to/telegram-notify/telegram_notify.py"],
       "env": {
-        "LINE_CHANNEL_ACCESS_TOKEN": "明文token寫在這裡",
-        "LINE_USER_ID": "明文id寫在這裡"
+        "TELEGRAM_BOT_TOKEN": "明文token寫在這裡",
+        "TELEGRAM_CHAT_ID": "明文chat id寫在這裡"
       }
     }
   }
@@ -163,8 +163,8 @@ chmod +x ~/claude-workspace/.claude/wrappers/start-line-bot.sh
 ```json
 {
   "mcpServers": {
-    "line-bot": {
-      "command": "/Users/你的帳號/claude-workspace/.claude/wrappers/start-line-bot.sh"
+    "telegram-notify": {
+      "command": "/Users/你的帳號/claude-workspace/.claude/wrappers/run_telegram_mcp.sh"
     }
   }
 }
@@ -188,7 +188,10 @@ chmod 600 ~/Library/Application\ Support/Claude/claude_desktop_config.json
 不一定。第一次有新程式嘗試存取時，系統會跳授權彈窗讓你確認；用 `security` 指令在 Terminal 下通常不會跳窗，因為是你本人主動操作。若想更嚴謹地限制「只有某支程式能免密碼存取」，可以在 `add-generic-password` 時加 `-T /path/to/允許的程式`。
 
 **Q: token 要不要定期更換？**
-建議會。萬一哪天真的外洩，換過的 token 能縮短被濫用的時間窗。更換時走第五節「更新已存在的密鑰」即可，不需要動到 wrapper script。
+建議會。萬一哪天真的外洩，換過的 token 能縮短被濫用的時間窗。Telegram Bot Token 可以透過 @BotFather 的 `/revoke` 指令重新產生。更換後走第五節「更新已存在的密鑰」即可，不需要動到 wrapper script。
+
+**Q: Chat ID 外洩會怎樣？**
+單獨外洩 Chat ID 風險較低（只是知道你在跟哪個對話互動），但若同時搭配 Bot Token 外洩，就能被冒用發送訊息到該對話，因此兩者仍建議一起妥善保管。
 
 ---
 
@@ -210,3 +213,5 @@ security add-generic-password -a "$USER" -s "SERVICE_NAME" -w "新值" -U
 # 刪除
 security delete-generic-password -a "$USER" -s "SERVICE_NAME"
 ```
+
+本教學中對應的 SERVICE_NAME 為 `telegram-bot-token` 與 `telegram-chat-id`。
