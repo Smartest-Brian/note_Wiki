@@ -1,5 +1,6 @@
-【給 Claude 的初始設定 prompt】(macOS 版 / 獨立隔離 VM)
-請依照以下規格，在這台 macOS 電腦上建立完整的工作目錄與規則檔案。
+【給 Claude 的初始設定 prompt】(macOS 版 / 獨立隔離 VM，含 Telegram 通知機制)
+請依照以下規格，在這台 macOS 電腦上建立完整的工作目錄與規則檔案，
+並完成 Telegram 通知機制的程式碼、執行環境與端對端測試。
 帳號路徑請一律使用 /Users/{account}/（或 ~/），{account} 請替換為當前 macOS 使用者帳號名稱。
 
 ================================================================
@@ -25,6 +26,18 @@
      只在對應 memory/{topic}.md 裡引用 dev/ 底下的路徑，不重複複製。
    - 另建立 .claude/wrappers/，專門存放「密鑰存取用的 wrapper script」，
      此資料夾內只放腳本本身，不放任何明文密鑰。
+5. Python 套件安裝原則（適用於所有需要外部套件的 dev/ 專案，不限 Telegram）：
+   - 任何需要安裝 Python 套件的情境，一律在對應 dev/{project}/ 專案目錄下
+     建立專屬虛擬環境（dev/{project}/.venv），不得對系統 python 或
+     Homebrew 管理的 python 執行全域 pip install（也不得加
+     `--break-system-packages` 硬闖 PEP 668 限制）。
+   - 若系統內建 python3 版本過舊、不符合套件需求（例如 fastmcp 需要
+     Python >=3.10，但系統可能只有 3.9），可用 Homebrew 安裝所需版本
+     （例：`brew install python@3.12`），再用該版本建立專屬 venv，
+     不覆蓋、不取代系統原有的 python3。
+   - wrapper script 若需要呼叫這類套件，直接指向對應 venv 內的
+     python 執行檔（例：dev/{project}/.venv/bin/python），
+     而不是呼叫系統 python3。
 
 ================================================================
 二、請建立以下檔案／資料夾架構
@@ -48,6 +61,10 @@
     │   ├── general/                # 尚未分類的資料檔
     │   └── （其他 {topic}/ 依實際需求動態新增）
     ├── dev/                        # 所有專案程式碼統一存放處（不分主題）
+    │   └── telegram-notify/
+    │       ├── telegram_notify.py # Telegram 發送邏輯（見四之五之 5.3）
+    │       └── .venv/              # 專屬虛擬環境（安裝 fastmcp 後產生，
+    │                               #   不手動建立內容，由 pip/venv 產生）
     └── logs/
         ├── activity_log.jsonl     # append-only 操作日誌（當月）
         └── archive/
@@ -93,6 +110,16 @@
 - 程式碼一律放 dev/，不因主題不同而分散路徑；memory/dev.md 記錄
   「此專案屬於哪個/哪些主題」以便交叉查找。
 
+### Python 套件安裝原則
+- 任何需要安裝 Python 套件的情境，一律在對應 dev/{project}/ 專案目錄下
+  建立專屬虛擬環境（dev/{project}/.venv），不得對系統 python 或
+  Homebrew 管理的 python 執行全域 pip install，也不得使用
+  `--break-system-packages` 繞過 PEP 668 限制。
+- 若系統 python3 版本不符套件需求，可用 Homebrew 安裝所需版本
+  （例：`brew install python@3.12`），再用該版本建立專屬 venv。
+- 需要呼叫該套件的 wrapper script，一律指向對應 venv 內的 python
+  執行檔，而不是系統 python3。
+
 ### 紀錄義務
 每次執行涉及「資料存取 / 修改 / 下載」的操作，完成後必須：
 1. 判斷本次所屬主題 {topic}（依上方動態分類原則）。
@@ -127,9 +154,15 @@ activity log 只記「何時、哪個主題、做了什麼」，不寫分析細�
      （適用範圍同「密鑰 / Token 存取」一節）。
   b. 任何會將資料「傳出這台 VM」的操作（發送 Telegram 訊息、呼叫外部
      API、上傳、對外連線分享等），執行前必須先向使用者確認要傳送的
-     內容，避免非預期夾帶個資或內部資料。
+     內容，避免非預期夾帶個資或內部資料。每次發送都要重新確認內容，
+     即使是重複測試也不能省略。
   c. 不得自行變更 VM 對外的網路 / 防火牆設定以「擴大」對外存取範圍，
      除非使用者明確指示。
+  d. 修改 `claude_desktop_config.json` 前必須先向使用者確認
+     （詳見「五、Token 安全儲存機制」5.4 節），不因它屬於「初始建置」
+     範圍而略過這一步 —— 初始建置只代表「產生程式碼 / 建立 venv /
+     更新 wrapper」這幾項本機、可逆的操作不需逐一確認，
+     不代表寫入 Claude Desktop 設定檔或對外發送測試訊息也可以省略確認。
 
 ### 時間格式
 - 一律使用 ISO 8601 含時區，時區為 +08:00。
@@ -195,16 +228,26 @@ macOS 上的密鑰不落地存放於任何檔案，而是存進系統的 **Keych
 通知管道統一改用 **Telegram Bot API**（不再使用 LINE）。
 
 ### 5.1 密鑰已存入 Keychain
-使用者已於 Terminal 手動執行過（Claude 不需、也不應重複執行）：
+使用者需於 Terminal 手動執行（Claude 不需、也不應重複執行）：
 ```bash
 security add-generic-password -a "$USER" -s "telegram-bot-token" -w "你的token"
 security add-generic-password -a "$USER" -s "telegram-chat-id" -w "你的chat id"
 ```
+若 Claude 檢查 Keychain 發現這兩筆密碼尚未建立，必須停止 Telegram 機制的
+建置並告知使用者先完成上述步驟，不得詢問使用者要不要直接貼明文。
 
 ### 5.2 wrapper script：run_telegram_mcp.sh
 - 存放路徑固定為：`~/claude-workspace/.claude/wrappers/run_telegram_mcp.sh`
 - 需要執行權限：`chmod +x ~/claude-workspace/.claude/wrappers/run_telegram_mcp.sh`
-- 本身不得包含任何明文密鑰，只負責「從 Keychain 取值 → export 環境變數 → 呼叫 MCP server」。
+- 本身不得包含任何明文密鑰，只負責「從 Keychain 取值 → export 環境變數
+  → 呼叫 telegram_notify.py，並把自己收到的參數原樣轉發」。
+- 之所以轉發參數（`"$@"`）：telegram_notify.py 同時支援「CLI 測試模式
+  （帶文字參數，直接發送並結束，供手動驗證用）」與「MCP server 模式
+  （不帶參數，走 fastmcp，供 Claude Desktop 呼叫）」，wrapper 需讓兩種
+  呼叫方式都能用同一支腳本進入。
+- `command` 指向的是 dev/telegram-notify/.venv 裡的 python（因為
+  MCP server 模式需要 fastmcp，而 fastmcp 只安裝在這個專屬 venv，
+  不是系統 python3），CLI 測試模式的 stdlib 邏輯在這個 venv 裡一樣能跑。
 
 ```bash
 #!/bin/bash
@@ -218,20 +261,84 @@ if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
   exit 1
 fi
 
-exec python3 /Users/{account}/claude-workspace/dev/telegram-notify/telegram_notify.py
+exec /Users/{account}/claude-workspace/dev/telegram-notify/.venv/bin/python /Users/{account}/claude-workspace/dev/telegram-notify/telegram_notify.py "$@"
 ```
 
 第一次執行 `security find-generic-password` 時，macOS 會跳出系統彈窗
 詢問是否允許該程式存取 Keychain 中的這筆密碼，選「一律允許」即可，
 之後不會再重複詢問。
 
-### 5.3 對應的 MCP server 程式碼位置
-程式碼本體（telegram_notify.py，僅提供單一功能：發送文字訊息，
-不具備讀取訊息 / 聯絡人等其他權限）放在：
+### 5.3 telegram_notify.py 程式碼與執行環境
+
+程式碼本體（僅提供單一功能：發送文字訊息，不具備讀取訊息 / 聯絡人等
+其他權限）放在：
 ```
 ~/claude-workspace/dev/telegram-notify/telegram_notify.py
 ```
 依「開發用程式碼統一集中於 dev/」原則管理，並於 memory/dev.md 索引。
+內容如下（已驗證可直接運作，建置時直接寫入這個內容即可，不需重新設計）：
+
+```python
+#!/usr/bin/env python3
+"""Send text messages to a Telegram chat via the Bot API.
+
+Single capability only: send_message. No reading of messages/contacts.
+Run with a CLI argument to send that text directly (manual testing).
+Run with no arguments to start as an MCP server (requires fastmcp),
+for use from Claude Desktop via the wrapper script.
+"""
+import json
+import os
+import sys
+import urllib.parse
+import urllib.request
+
+
+def send_message(text: str) -> dict:
+    token = os.environ["TELEGRAM_BOT_TOKEN"]
+    chat_id = os.environ["TELEGRAM_CHAT_ID"]
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    data = urllib.parse.urlencode({"chat_id": chat_id, "text": text}).encode()
+    with urllib.request.urlopen(url, data=data, timeout=10) as resp:
+        return json.loads(resp.read().decode())
+
+
+def run_mcp_server() -> None:
+    from fastmcp import FastMCP
+
+    mcp = FastMCP("telegram-notify")
+
+    @mcp.tool()
+    def send_telegram_message(text: str) -> dict:
+        """Send a plain text message to the configured Telegram chat."""
+        return send_message(text)
+
+    mcp.run()
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        result = send_message(" ".join(sys.argv[1:]))
+        print(json.dumps(result, ensure_ascii=False))
+    else:
+        run_mcp_server()
+```
+
+**執行環境建置步驟（建置時依序執行）：**
+1. 確認系統 python3 版本：`python3 --version`。
+2. 若版本 < 3.10（fastmcp 的最低需求），先用 Homebrew 安裝夠新的版本：
+   `brew install python@3.12`（若 Homebrew 本身未安裝，先告知使用者
+   並詢問是否要安裝 Homebrew，不自行擴大安裝範圍）。
+3. 在專案目錄下建立專屬虛擬環境：
+   `<python3.12路徑> -m venv ~/claude-workspace/dev/telegram-notify/.venv`
+4. 升級 pip 並安裝 fastmcp（只在這個 venv 裡，不裝到系統或 Homebrew
+   全域環境，不使用 `--break-system-packages`）：
+   ```
+   ~/claude-workspace/dev/telegram-notify/.venv/bin/python -m pip install --upgrade pip
+   ~/claude-workspace/dev/telegram-notify/.venv/bin/python -m pip install fastmcp
+   ```
+5. 驗證安裝：確認 `telegram_notify` 模組與 `fastmcp` 都能在這個 venv
+   裡正常 import（不需要真的啟動 MCP server 去做這個驗證）。
 
 ### 5.4 Claude Desktop 的 MCP 設定
 密鑰配置檔位置為：
@@ -252,12 +359,21 @@ MCP server 時透過 wrapper 動態注入環境變數：
 }
 ```
 
-此章節屬於「知識參考」，Claude 不得自動修改 `claude_desktop_config.json`，
-如需變更須先向使用者確認。另外建議：
+若該檔案已存在且已有其他 `mcpServers` 項目，採「合併」方式加入
+`telegram-notify` 這個項目，不整檔覆蓋既有設定。
+
+此章節屬於「知識參考」，Claude **不得自動修改** `claude_desktop_config.json`，
+即使是在「初始建置」流程中，也必須先向使用者確認要不要建立 / 修改這個檔案，
+確認後才動手。修改完成後執行：
 ```bash
 chmod 600 ~/Library/Application\ Support/Claude/claude_desktop_config.json
 ```
 確保只有目前使用者帳號能讀取這個設定檔本身。
+
+若這台機器根本沒有安裝 Claude Desktop（`/Applications` 裡找不到），
+不需要幫使用者安裝，先詢問使用者是否要安裝；使用者選擇不裝時，
+Telegram 機制仍可透過「CLI 測試模式」（wrapper script 帶文字參數）
+獨立驗證可用，不影響其他部分的建置。
 
 ### 5.5 使用時機
 - 任何需要「主動通知使用者」的情境（任務完成、異常告警等），
@@ -265,13 +381,15 @@ chmod 600 ~/Library/Application\ Support/Claude/claude_desktop_config.json
   「終端機權限與資安邊界」b 項向使用者確認訊息內容。
 - 未來若新增其他密鑰（非 Telegram），比照本節模式：
   Keychain 存值 → 新增一支 wrapper script → 於 claude_desktop_config.json
-  或對應設定檔中指向該 wrapper。
+  或對應設定檔中指向該 wrapper；若該密鑰對應的程式需要額外 Python 套件，
+  比照「Python 套件安裝原則」建立專屬 venv。
 
-================================================================
-五、memory 子檔案骨架（新主題建立時套用此模板）
-================================================================
+---
+
+## 六、memory 子檔案骨架（新主題建立時套用此模板）
 
 ===== memory/{topic}.md 模板 =====
+```
 ---
 分類: （主題中文說明，例如：旅遊規劃）
 主題 slug: {topic}
@@ -292,9 +410,10 @@ chmod 600 ~/Library/Application\ Support/Claude/claude_desktop_config.json
 | - | - | - |
 
 ## 待辦 / 追蹤中
-
+```
 
 ===== memory/dev.md（固定存在，跨主題共用）=====
+```
 ---
 分類: 程式撰寫與除錯（跨主題）
 最後更新: （建立當天日期）
@@ -305,10 +424,12 @@ chmod 600 ~/Library/Application\ Support/Claude/claude_desktop_config.json
 ## 專案索引
 | 專案 | 路徑 | 所屬主題 | 語言 / 技術 | 說明 |
 |------|------|----------|-------------|------|
-| telegram-notify | dev/telegram-notify/ | （通知類，跨主題共用） | Python / fastmcp | 單向發送 Telegram 訊息的 MCP server |
+| telegram-notify | dev/telegram-notify/telegram_notify.py | （通知類，跨主題共用） | Python 3（stdlib）+ fastmcp（於 .venv） | 單向發送 Telegram 文字訊息，僅有 send_message 一個能力 |
 
 ## 環境與慣用寫法
-（Python/Node 版本、虛擬環境位置、常用套件、程式風格慣例）
+（Python/Node 版本、虛擬環境位置、常用套件、程式風格慣例；
+Python 專案若需要外部套件，預設在 dev/{project}/.venv 建立虛擬環境，
+不對系統或 Homebrew python 執行全域 pip install）
 
 ## 除錯紀錄與教訓
 | 日期 | 問題 | 原因 | 解法 |
@@ -316,9 +437,10 @@ chmod 600 ~/Library/Application\ Support/Claude/claude_desktop_config.json
 | - | - | - | - |
 
 ## 待辦 / 追蹤中
-
+```
 
 ===== memory/general.md（固定存在）=====
+```
 ---
 分類: 尚未分類 / 雜項
 最後更新: （建立當天日期）
@@ -336,9 +458,10 @@ chmod 600 ~/Library/Application\ Support/Claude/claude_desktop_config.json
 | 日期 | 檔案 | 內容說明 |
 |------|------|----------|
 | - | - | - |
+```
 
 ================================================================
-六、README.md 內容
+五、README.md 內容
 ================================================================
 # claude-workspace
 
@@ -347,12 +470,13 @@ Claude（Claude Code / Claude Desktop）在這台 macOS VM 上的行為紀錄與
 ## 導覽
 - `.claude/CLAUDE.md` — 主規則檔（全域規則、主題分類機制、路徑索引、Token 存取機制）
 - `.claude/wrappers/` — 密鑰存取用 wrapper script（不含任何明文密鑰）
-  - `run_telegram_mcp.sh` — 啟動 Telegram 通知 MCP server
+  - `run_telegram_mcp.sh` — 啟動 / 呼叫 Telegram 通知（MCP server 模式或 CLI 測試模式）
 - `.claude/memory/` — 各主題細節紀錄（依需求動態新增，非固定清單）
   - `dev.md` 程式碼專案索引（跨主題共用）
   - `general.md` 尚未分類 / 雜項
 - `data/` — 實際產生的資料檔，依主題分資料夾（依需求動態新增）
 - `dev/` — 所有專案程式碼統一存放處，不分主題
+  - `telegram-notify/` — Telegram 發送邏輯 + 專屬 venv（fastmcp）
 - `logs/activity_log.jsonl` — 按時間累積的操作日誌（append-only，當月）
 - `logs/archive/` — 每月封存的舊日誌
 
@@ -361,14 +485,14 @@ Claude（Claude Code / Claude Desktop）在這台 macOS VM 上的行為紀錄與
 因此不論工作目錄在哪，規則都會生效。
 
 本機為與實體主機完全隔離的 macOS VM，Claude 在此 VM 內的終端機操作
-擁有完整權限，但密鑰 / 個資不落地、對外傳送前需確認的規則不受影響
-（詳見主規則檔「終端機權限與資安邊界」）。
+擁有完整權限，但密鑰 / 個資不落地、對外傳送前需確認、修改 Claude Desktop
+設定前需確認的規則不受影響（詳見主規則檔「終端機權限與資安邊界」）。
 
 密鑰一律不落地於本資料夾內任何檔案，只存於 macOS Keychain，
 由 `.claude/wrappers/` 內的腳本在執行當下動態取用。
 
 ================================================================
-七、資料檔命名規則
+六、資料檔命名規則
 ================================================================
 一律日期前綴：YYYY-MM-DD_主題_內容.副檔名
 例：2026-08-29_tokyo_itinerary.csv
@@ -376,16 +500,40 @@ Claude（Claude Code / Claude Desktop）在這台 macOS VM 上的行為紀錄與
     2026-08-29_portscan_192.168.1.0-24.txt
 
 ================================================================
-八、建置完成後請回報
+七、建置流程與完成後請回報
 ================================================================
-1. 確認上述所有檔案與資料夾（含 .claude/wrappers/、dev/）皆已建立完成。
-2. 確認 run_telegram_mcp.sh 已建立且具執行權限。
-3. 於 activity_log.jsonl 寫入本次建置的第一筆紀錄（topic 填 general）。
-4. 於 general.md 寫入本次建置的雜項紀錄。
-5. 明確提醒使用者：
-   - telegram-notify 的程式碼（telegram_notify.py）尚需實際放入
-     dev/telegram-notify/ 底下（若本次建置未一併提供）。
-   - claude_desktop_config.json 是否已依「5.4」設定指向 wrapper script，
-     需使用者自行確認或授權 Claude 修改。
-6. 提醒使用者：需重新開啟 session（或執行 /memory 重載）主規則檔才會實際生效。
+建置請依下列順序執行：
+
+1. 建立「二、目錄結構」內的所有檔案與資料夾（含 .claude/wrappers/、dev/）。
+2. 檢查 Keychain 是否已有 `telegram-bot-token` 與 `telegram-chat-id`
+   （用 `security find-generic-password` 檢查是否能取到值，不印出明文）。
+   若沒有，停止 Telegram 相關的後續步驟，告知使用者依「5.1」節先手動建立，
+   其餘目錄骨架仍可先完成。
+3. 若 Keychain 已備妥，依「5.3」節內容建立 `telegram_notify.py`，
+   並依該節「執行環境建置步驟」建立 venv、安裝 fastmcp。
+4. 依「5.2」節內容建立 / 更新 `run_telegram_mcp.sh`，並 `chmod +x`。
+5. 在 `activity_log.jsonl` 寫入本次建置的紀錄（topic 填 general 與/或 dev），
+   並在 `general.md`、`dev.md` 寫入對應的雜項與專案索引紀錄
+   （步驟 1-4 屬於本機、可逆操作，不需向使用者逐一確認）。
+6. 詢問使用者是否要建立 / 合併 `claude_desktop_config.json`
+   （即使使用者已經在最初的指示中要求「完成 Telegram 機制」，
+   這一步仍要單獨詢問，因為它是「五、Token 安全儲存機制」5.4 節
+   明訂的硬性確認邊界）。使用者同意才動手，並事後 `chmod 600`。
+   若這台機器沒有安裝 Claude Desktop，告知使用者並詢問是否要安裝；
+   使用者選擇不裝也不影響其他步驟完成。
+7. 詢問使用者要發送的測試訊息內容（提出一個預設文字讓使用者確認即可，
+   不得未經確認就發送），確認後才透過
+   `run_telegram_mcp.sh "測試訊息文字"` 實際發送一次，驗證整條鏈路
+   （Keychain → wrapper → telegram_notify.py → Telegram API）真的可用。
+8. 將步驟 3-7 的結果（含測試發送成功與否、Telegram API 回應的
+   `ok` 欄位）追加寫入 `activity_log.jsonl` 與 `memory/dev.md`。
+9. 最後向使用者回報：
+   - 目錄與規則檔是否全部建立完成。
+   - `run_telegram_mcp.sh` 是否已建立且具執行權限。
+   - Telegram 端對端測試是否成功（附上 Telegram API 的 `ok` 欄位結果，
+     不附上 token / chat id 等明文）。
+   - `claude_desktop_config.json` 目前狀態（已建立 / 使用者選擇不建立 /
+     Claude Desktop 未安裝）。
+   - 明確提醒使用者：需重新開啟 session（或執行 `/memory` 重載）
+     主規則檔才會實際生效。
 ================================================================
